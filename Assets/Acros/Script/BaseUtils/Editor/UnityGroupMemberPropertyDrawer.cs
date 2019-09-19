@@ -6,15 +6,16 @@ using System.Reflection;
 
 namespace Acros
 {
-    [CustomPropertyDrawer(typeof(UnityGroupMemberPropertyAttribute))]
+    [CustomPropertyDrawer(typeof(UnityGroupMemberPropertyAttribute),true)]
     public class UnityGroupMemberPropertyDrawer : PropertyDrawer
     {
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
             var attr = attribute as UnityGroupMemberPropertyAttribute;
 
-
             SerializedProperty groupProp = null, memberProp = null;
+
+            var groupInfoData = GetEventGroupMemberData(attr);
 
             if (attr.Group == property.name)
             {
@@ -24,40 +25,48 @@ namespace Acros
 
                 if (groupProp.propertyType == SerializedPropertyType.Integer)
                 {
-                    //TODO:
-                    int value = EditorGUI.IntPopup(position, groupProp.displayName, groupProp.intValue,null,null);
+                    groupProp.intValue = EditorGUI.IntPopup(position, groupProp.displayName, groupProp.intValue, groupInfoData.allNames,
+                        groupInfoData.allValues);
                 }
 
             }
 
         }
 
-        class ValueInfo
+        class AcMemberInfo
         {
-            public int[] intValues;
-            public string[] strValues;
-            public string[] names;
-            public Type valueType;
+            public int value;
+            public string friendlyName;
+            public MemberInfo info;
+        };
+
+        class AcGroupInfo
+        {
+            public int groupIndex;
+            public Type groupType;
+            public string friendlyName;
+
+            public Dictionary<int, AcMemberInfo> members = new Dictionary<int, AcMemberInfo>();
+        };
+
+        class AcPairData
+        {
+            public string[] allNames;
+            public int[] allValues;
+
+            public Dictionary<int, AcGroupInfo> groups = new Dictionary<int, AcGroupInfo>();
         }
 
-
-        class DataInfo
-        {
-            public ValueInfo parent;
-            public Dictionary<object, ValueInfo> child;
-
-        }
-
-        private static Dictionary<Type, DataInfo> InnerData;
+        private static Dictionary<Type, AcPairData> InnerData = null;
 
         //Only for class EventCategory
-        private static DataInfo GetEventGroupMemberData(UnityGroupMemberPropertyAttribute attr)
+        private static AcPairData GetEventGroupMemberData(UnityGroupMemberPropertyAttribute attr,bool forceRefresh = false)
         {
             if (InnerData != null && InnerData.ContainsKey(attr.GetType()))
                 return InnerData[attr.GetType()];
 
-            Dictionary<int, Type> allGroups = new Dictionary<int, Type>();
-            Dictionary<int, Dictionary<int, Type>> groupMemberMaps = new Dictionary<int, Dictionary<int, Type>>();
+            if(InnerData == null || forceRefresh)
+                InnerData = new Dictionary<Type, AcPairData>();
 
             Func<MemberInfo, object> GetValue = (m) =>
              {
@@ -73,55 +82,71 @@ namespace Acros
                  }
              };
 
+            AcPairData pData = new AcPairData();
+
             var groupAttrType = attr.GetGroupAttrType();
             foreach (var groupClass in typeof(EventCategory).GetMembers(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (groupClass.IsDefined(groupAttrType, true))
                 {
-                    //Get main index
-                    var uniqueID =  groupClass.DeclaringType.GetMember("INDEX");
-                    if (uniqueID != null && uniqueID.Length == 1 && uniqueID[0].DeclaringType == typeof(int))
+                    AcGroupInfo tempGroup = new AcGroupInfo();
+
+                    //Get Group Type
+                    TypeInfo nestedGroupClass = (TypeInfo)groupClass;
+                    var groupID = nestedGroupClass.GetMember("INDEX");
+                    if (groupID != null && groupID.Length == 1)
                     {
                         //Add Group
-                        int indexValue = (int)GetValue(uniqueID[0]);
-#if UNITY_EDITOR
-                        if (allGroups.ContainsKey(indexValue))
-                        {
-                            Debug.LogError("Duplicate [INDEX] value in class " + allGroups[indexValue].Name + " and " + groupClass.Name);
-                            continue;
-                        }
-#endif
-                        allGroups.Add(indexValue, groupClass.DeclaringType);
+                        int indexValue = (int)GetValue(groupID[0]);
+                        tempGroup.groupIndex = indexValue;
+                        tempGroup.groupType = groupAttrType;
+
+                        var groupAttr = (EventCategoryIDAttribute)groupClass.GetCustomAttributes(attr.GetGroupAttrType(), true)[0];
+                        tempGroup.friendlyName = groupAttr.FriendlyName;
 
                         //Add Members
-                        Dictionary<int, Type> memberList = new Dictionary<int, Type>();
-                        foreach (var member in groupClass.DeclaringType.GetMembers(BindingFlags.GetField | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
+                        Dictionary<int, AcMemberInfo> memberList = new Dictionary<int, AcMemberInfo>();
+                        foreach (var member in nestedGroupClass.GetMembers(BindingFlags.GetField | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))
                         {
                             if (member.IsDefined(attr.GetMemberAttrType(), true))
                             {
-                                int value = (int)GetValue(member);
-#if UNITY_EDITOR
-                                if (memberList.ContainsKey(indexValue))
-                                {
-                                    Debug.LogError("Duplicate member value in class " + groupClass.Name + "Conflict Members:" + 
-                                        memberList[value].Name + " and " + member.Name);
-                                    continue;
-                                }
-#endif
-                                memberList.Add(value, member.DeclaringType);
+                                int memberIDValue = (int)GetValue(member);
+
+                                var memberAttr = (EventMemberIDAttribute)member.GetCustomAttributes(attr.GetMemberAttrType(), true)[0];
+                                AcMemberInfo tempMember = new AcMemberInfo();
+                                tempMember.friendlyName = memberAttr.FriendlyName;
+                                tempMember.value = memberIDValue;
+                                tempMember.info = member;
+
+                                memberList.Add(memberIDValue, tempMember);
                             }
                         }
 
-                        groupMemberMaps.Add(indexValue, memberList);
+                        tempGroup.members = memberList;
+
+                        pData.groups.Add(tempGroup.groupIndex, tempGroup);
                     }
                     else
                     {
                         Debug.LogError("Member of [INDEX] in int type cannot be found in class :" + groupClass.Name);
                     }
+
                 }
-
-
             }
+
+            //Prepare data for GUI
+            pData.allNames = new string[pData.groups.Count];
+            pData.allValues = new int[pData.groups.Count];
+            int index = 0;
+            foreach (var p in pData.groups)
+            {
+                pData.allNames[index] = p.Value.friendlyName;
+                pData.allValues[index] = p.Value.groupIndex;
+                ++index;
+            }
+
+            InnerData.Add(attr.GetType(), pData);
+
 
             return InnerData[attr.GetType()];
         }

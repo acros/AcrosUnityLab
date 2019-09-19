@@ -74,6 +74,21 @@ public class CommonEventListener : MonoBehaviour {
                 }
             }
         }
+
+        //Print Log
+        foreach (var item in allGroups)
+        {
+            Debug.Log("Event group:" + item.Value.Name + " index:" + item.Key);
+
+            var members = groupMemberMaps[item.Key];
+            foreach (var m in members)
+            {
+                Debug.Log("Relate member: " + m.Value.MemberType.ToString() + " =" + m.Key);
+            }
+
+        }
+
+
     }
 
 }
