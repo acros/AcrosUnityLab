@@ -52,21 +52,18 @@ Shader "TKoU/ScreenSpaceSnow"
 				return o;
 			}
 
+			/*
+			// Reconstruct view-space position from UV and depth.
+			// p11_22 = (unity_CameraProjection._11, unity_CameraProjection._22)
+			// p13_31 = (unity_CameraProjection._13, unity_CameraProjection._23)
+			float3 ReconstructViewPos(float2 uv, float depth, float2 p11_22, float2 p13_31)
+			{
+				return float3((uv * 2.0 - 1.0 - p13_31) / p11_22 * CheckPerspective(depth), depth);
+			}
+			*/
+
 			fixed4 frag(v2f i) : SV_Target
 			{
-				/*
-				half3 normal;
-				float depth;
-
-				DecodeDepthNormal(tex2D(_CameraDepthNormalsTexture, i.uv), depth, normal);
-				normal = mul((float3x3)_CamToWorld, normal);
-
-				half snowAmount = normal.g;
-				half scale = (_BottomThreshold + 1 - _TopThreshold) / 1 + 1;
-				snowAmount = saturate((snowAmount - _BottomThreshold) * scale);
-
-				return half4(snowAmount, snowAmount, snowAmount, 1);
-				*/
 				half3 normal;
 				float depth;
 
@@ -78,20 +75,23 @@ Shader "TKoU/ScreenSpaceSnow"
 				half scale = (_BottomThreshold + 1 - _TopThreshold) / 1 + 1;
 				snowAmount = saturate((snowAmount - _BottomThreshold) * scale);
 
+				//////////////////////////////////////////////////////////////
+				//[Key] - Find a mapping method for snow texture
 				// find out snow color
 				float2 p11_22 = float2(unity_CameraProjection._11, unity_CameraProjection._22);
-				float3 vpos = float3((i.uv * 2 - 1) / p11_22, -1) * depth;
-				float4 wpos = mul(_CamToWorld, float4(vpos, 1));
-				wpos += float4(_WorldSpaceCameraPos, 0) / _ProjectionParams.z;
+				float3 vpos = float3((i.uv * 2 - 1) / p11_22, -1) * depth;	//Viewport pos of the pixel
+				float4 wpos = mul(_CamToWorld, float4(vpos, 1));			//World pos
+				
+				wpos += (float4(_WorldSpaceCameraPos, 0) / _ProjectionParams.z);
+				wpos *= (_SnowTexScale * _ProjectionParams.z);		//  _ProjectionParams.z - Camera's far clip 
 
-				wpos *= _SnowTexScale * _ProjectionParams.z;
+				//Wpos.wz - Horizental Plane
 				half4 snowColor = tex2D(_SnowTex, wpos.xz) * _SnowColor;
+				//////////////////////////////////////////////////////////////
 
 				// get color and lerp to snow texture
 				half4 col = tex2D(_MainTex, i.uv);
 				return lerp(col, snowColor, snowAmount);
-
-
 			}
 			ENDCG
 		}
