@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Acros/Scene/Snow.unity
+    guid: edb4609387ce2e041b7f41f4042f1e9b
   m_configObjects: {}

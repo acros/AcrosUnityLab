@@ -31,7 +31,7 @@ public class ScreenSpaceSnow : MonoBehaviour
 
 
         //TODO: Why must deferred?
-        Debug.Assert(_Cam.renderingPath == RenderingPath.DeferredShading);
+/*        Debug.Assert(_Cam.renderingPath == RenderingPath.DeferredShading);*/
     }
 
     void OnRenderImage(RenderTexture src, RenderTexture dest)
