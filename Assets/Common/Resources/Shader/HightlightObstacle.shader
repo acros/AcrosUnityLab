@@ -52,8 +52,11 @@
 		Pass
 		{
 			ZTest Greater
+			Cull Back
 
 			CGPROGRAM
+
+			#include "UnityCG.cginc"
 			#pragma vertex vert
 			#pragma fragment frag
 
@@ -63,25 +66,32 @@
 			{
 				float4 vertex : POSITION;
 				float2 uv : TEXCOORD0;
+				float3 normal : NORMAL;
 			};
 
 			struct v2f
 			{
 				float2 uv : TEXCOORD0;
 				float4 vertex : SV_POSITION;
+				float3 normal : NORMAL;
+				float3 viewDir :TANGENT;
 			};
 
 			v2f vert(appdata v)
 			{
 				v2f o;
 				o.vertex = UnityObjectToClipPos(v.vertex);
+				o.normal = UnityObjectToWorldNormal(v.normal);
+				o.viewDir = normalize(_WorldSpaceCameraPos.xyz - mul(unity_ObjectToWorld, v.vertex).xyz);
 				o.uv = v.uv;
 				return o;
 			}
 
 			fixed4 frag(v2f i) : SV_Target
 			{
-				return lerp(tex2D(_MainTex, i.uv),fixed4(1, 0, 0,1),0.5);
+				float NdotV = 1 - dot(i.normal, i.viewDir);
+				return lerp(tex2D(_MainTex, i.uv), NdotV * fixed4(1, 0, 0, NdotV), 1);
+//				return (1 - NdotV) * tex2D(_MainTex, i.uv) + NdotV * fixed4(1, 0, 0, 1);
 			}
 
 			ENDCG
